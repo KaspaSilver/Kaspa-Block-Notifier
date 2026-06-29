@@ -19,9 +19,71 @@ Cost per notification: ~0.002 KAS in transaction fees (pure self-spend, no KAS s
 
 # Setup
 
-Download file and run
+## Installation
+  <details>
+  <summary>Building on Linux</summary>
+
+Download docker
 ```
-cd ~/kaspa-block-notifier
+# Install Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+
+# Add your user to the docker group (so you don't need sudo)
+sudo usermod -aG docker $USER
+
+# Enable Docker to start on boot
+sudo systemctl enable docker
+sudo systemctl start docker
+
+# Log out and back in for group changes to take effect
+# Then verify it works
+docker --version
+docker compose version
+```
+
+Download git
+```
+sudo apt install git -y
+
+# Set your identity (shows up in commits)
+git config --global user.name "Your Name"
+git config --global user.email "your@email.com"
+
+# Verify
+git --version
+```
+
+Clone This repo
+```
+git clone https://github.com/KaspaSilver/Kaspa-Block-Notifier.git
+```
+
+In terminal cd into the directory you just cloned
+```
+cd ~/Kaspa-Block-Notifier
+```
+
+Edit the .env file with your personal info such as mining address, bot address private key, etc...
+```
+nano .env
+```
+Save it with ctrl + o, click enter, then ctrl + x
+
+Build it and run logs to verify it is working
+```
 docker compose up -d --build
 docker logs -f kaspa-block-notifier
 ```
+
+If working you should see
+```
+DATE TIME  INFO      Connecting to kaspad at host-gateway:16110
+
+DATE TIME  INFO      Watching address : your mining address
+
+DATE TIME  INFO      Min reward filter: 0.0 KAS
+
+DATE TIME  INFO      Subscribed. Waiting for block rewards...
+```
+
