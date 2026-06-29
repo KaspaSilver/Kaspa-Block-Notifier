@@ -1,5 +1,4 @@
 # Kaspa-Block-Notifier
-# kaspa-block-notifier
 
 A Dockerized watcher that sends you a private encrypted **KaChat message** every time your Kaspa node finds a block reward.
 
