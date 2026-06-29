@@ -15,6 +15,9 @@ Built on the [Kasia protocol](https://github.com/K-Kluster/Kasia) — messages a
 
 Cost per notification: ~0.002 KAS in transaction fees (pure self-spend, no KAS sent anywhere).
 
+## Important Info
+You must grab the alias of your addresses. To find where this is use https://kaspa.stream/ to see your alias within a sent Kaspa message.
+
 ---
 
 # Setup
@@ -86,4 +89,6 @@ DATE TIME  INFO      Min reward filter: 0.0 KAS
 
 DATE TIME  INFO      Subscribed. Waiting for block rewards...
 ```
+
+
 
