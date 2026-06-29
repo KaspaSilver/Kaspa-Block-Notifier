@@ -117,7 +117,6 @@ async def send_kachat_notification(kas_amount: float, reward_txid: str):
 
         balance     = await get_balance(rpc, MINING_ADDRESS)
         message     = (
-            f"⛏️ Kaspa Block Found\n"
             f"Reward: {kas_amount:.8f} KAS\n"
             f"Balance: {balance:.8f} KAS"
         )
