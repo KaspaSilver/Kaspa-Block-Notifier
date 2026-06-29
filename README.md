@@ -8,7 +8,7 @@ Built on the [Kasia protocol](https://github.com/K-Kluster/Kasia) — messages a
 
 ## How it works
 
-1. Connects to your local `kaspad` node with --utxoindex enabled via gRPC and subscribes to UTXO changes on your mining address
+1. Connects to your local `kaspad` node with --utxoindex, --rpclisten=0.0.0.0:16110, and --rpclisten-borsh=0.0.0.0:17110 enabled and subscribes to UTXO changes on your mining address
 2. When a block reward arrives it encrypts a message using the Kasia protocol
 3. Broadcasts a self-spend Kaspa transaction with the encrypted message as the payload
 4. KaChat on your phone decrypts and displays the notification
