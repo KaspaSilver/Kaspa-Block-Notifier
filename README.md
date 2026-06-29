@@ -16,3 +16,14 @@ Built on the [Kasia protocol](https://github.com/K-Kluster/Kasia) — messages a
 Cost per notification: ~0.002 KAS in transaction fees (pure self-spend, no KAS sent anywhere).
 
 ---
+
+# Setup
+
+Download file and run
+```
+cd ~/kaspa-block-notifier
+docker compose down
+docker rmi kaspa-block-notifier-block-notifier
+docker compose up -d --build
+docker logs -f kaspa-block-notifier
+```
