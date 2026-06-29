@@ -59,7 +59,7 @@ Clone This repo
 git clone https://github.com/KaspaSilver/Kaspa-Block-Notifier.git
 ```
 
-In terminal cd into the directory you just cloned
+Cd into the directory you just cloned
 ```
 cd ~/Kaspa-Block-Notifier
 ```
