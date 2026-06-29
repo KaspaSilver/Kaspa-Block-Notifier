@@ -1,0 +1,11 @@
+services:
+  block-notifier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kaspa-block-notifier
+    restart: always
+    env_file:
+      - .env
+    extra_hosts:
+      - "host-gateway:host-gateway"
