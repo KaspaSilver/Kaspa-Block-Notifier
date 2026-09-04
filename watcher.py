@@ -6,6 +6,7 @@ Pure self-spend — only pays the transaction fee.
 Connects to kaspad via host-gateway (Docker host).
 """
 
+from datetime import datetime
 import os
 import sys
 import time
@@ -52,9 +53,40 @@ MIN_REWARD_KAS    = float(os.environ.get("MIN_REWARD_KAS", "0"))
 RECEIVER_ALIAS    = os.environ["RECEIVER_ALIAS"]
 RECEIVER_PUBKEY_X = os.environ["RECEIVER_PUBKEY_X"]
 
+# What the notification says. The default is what this sent before it was
+# configurable, so an existing deployment that sets nothing is unaffected.
+#
+# An env file cannot carry a real newline -- every value is one line -- so a
+# literal \n in the template becomes one here.
+DEFAULT_MESSAGE   = "Reward: {reward} KAS\nBalance: {balance} KAS"
+MESSAGE_TEMPLATE  = (os.environ.get("MESSAGE_TEMPLATE") or DEFAULT_MESSAGE).replace("\\n", "\n")
+
 
 def sompi_to_kas(sompi: int) -> float:
     return sompi / 1e8
+
+
+def render_message(kas_amount: float, balance: float, reward_txid: str) -> str:
+    """Fills MESSAGE_TEMPLATE in.
+
+    A template with a placeholder this does not know would raise at the one
+    moment that matters -- a block has just been found -- and the notification
+    would be lost rather than late. So a bad template falls back to the default
+    and says so in the log, and the message still goes out.
+    """
+    fields = {
+        "reward": f"{kas_amount:.8f}",
+        "balance": f"{balance:.8f}",
+        "txid": reward_txid,
+        "address": MINING_ADDRESS,
+        "network": NETWORK,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    try:
+        return MESSAGE_TEMPLATE.format(**fields)
+    except (KeyError, IndexError, ValueError) as exc:
+        log.warning("MESSAGE_TEMPLATE could not be used (%s); sending the default message.", exc)
+        return DEFAULT_MESSAGE.format(**fields)
 
 
 # ── KaChat encryption (Kasia protocol) ───────────────────────────────────────
@@ -116,10 +148,7 @@ async def send_kachat_notification(kas_amount: float, reward_txid: str):
         await rpc.connect()
 
         balance     = await get_balance(rpc, MINING_ADDRESS)
-        message     = (
-            f"Reward: {kas_amount:.8f} KAS\n"
-            f"Balance: {balance:.8f} KAS"
-        )
+        message     = render_message(kas_amount, balance, reward_txid)
         log.info("Message: %s", message.replace("\n", " | "))
         payload_hex = build_payload_hex(message)
 
