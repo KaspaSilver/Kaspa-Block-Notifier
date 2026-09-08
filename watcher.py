@@ -260,6 +260,21 @@ def main():
             log.error("Required environment variable %s is not set.", var)
             sys.exit(1)
 
+    # --test sends one notification right now, with sample figures, then exits.
+    # It is a real on-chain KaChat message from the funded wallet, so it proves
+    # the whole setup end to end: the control panel runs it on the Setup tab.
+    if "--test" in sys.argv:
+        log.info("Sending a TEST notification with sample figures...")
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(
+                send_kachat_notification(1.23456789, "test-notification-no-real-block")
+            )
+        finally:
+            loop.close()
+        log.info("Test finished. If the wallet was funded, the message is on its way to your KaChat alias.")
+        return
+
     retry_delay = 5
     while True:
         try:
