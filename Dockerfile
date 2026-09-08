@@ -42,6 +42,10 @@ RUN python -m grpc_tools.protoc \
 
 # ── Application code ──────────────────────────────────────────────────────────
 COPY watcher.py .
+# Wallet generator, run on its own (python gen_wallet.py) by the control panel
+# to create the sending wallet. Uses the same SDK as watcher.py, so the address
+# it prints is exactly the one the bot spends from.
+COPY gen_wallet.py .
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
 # Unbuffered output so logs appear immediately in `docker logs`
