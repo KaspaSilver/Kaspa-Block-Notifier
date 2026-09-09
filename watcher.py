@@ -190,6 +190,55 @@ async def send_kachat_notification(kas_amount: float, reward_txid: str):
         log.error("Failed to send KaChat notification: %s", exc, exc_info=True)
 
 
+async def send_raw_message(text: str):
+    """Send an arbitrary KaChat message from the wallet to the receiver.
+
+    Used by `--send`, which the control panel drives for alerts that are not
+    tied to a block (a hashrate drop, say). Same wallet, receiver and payload
+    format as a block notification; only the text is different.
+    """
+    try:
+        private_key = PrivateKey(PRIVATE_KEY_HEX)
+        bot_address = private_key.to_public_key().to_address(NETWORK).to_string()
+
+        rpc = RpcClient(url=NODE_WRPC)
+        await rpc.connect()
+        try:
+            payload_hex = build_payload_hex(text)
+
+            utxo_resp = await rpc.get_utxos_by_addresses({"addresses": [bot_address]})
+            entries   = utxo_resp.get("entries", [])
+            if not entries:
+                log.warning("Bot wallet empty. Fund %s with ~2 KAS.", bot_address)
+                return
+            spendable = [e for e in entries if not e["utxoEntry"]["isCoinbase"]]
+            if not spendable:
+                log.warning("No spendable UTXOs (all coinbase). Waiting for maturity.")
+                return
+
+            best_utxo  = max(spendable, key=lambda e: e["utxoEntry"]["amount"])
+            input_amt  = best_utxo["utxoEntry"]["amount"]
+            output_amt = max(input_amt - 200_000, input_amt // 2)
+
+            result = create_transactions(
+                network_id=NETWORK,
+                entries=[best_utxo],
+                outputs=[PaymentOutput(Address(bot_address), output_amt)],
+                change_address=Address(bot_address),
+                priority_fee=183300,
+                payload=payload_hex,
+            )
+            for tx in result["transactions"]:
+                tx.sign([private_key])
+                txid = await tx.submit(rpc)
+                log.info("Message sent! Fee: %d sompi  TX: %s", tx.fee_amount, txid)
+        finally:
+            await rpc.disconnect()
+
+    except Exception as exc:
+        log.error("Failed to send message: %s", exc, exc_info=True)
+
+
 # ── gRPC subscription ─────────────────────────────────────────────────────────
 
 def subscribe_requests():
@@ -273,6 +322,22 @@ def main():
         finally:
             loop.close()
         log.info("Test finished. If the wallet was funded, the message is on its way to your KaChat alias.")
+        return
+
+    # --send delivers one arbitrary message and exits. The text is the argument
+    # after --send, or the ALERT_MESSAGE env var. The control panel uses this to
+    # send hashrate-drop alerts it detects itself.
+    if "--send" in sys.argv:
+        idx = sys.argv.index("--send")
+        text = sys.argv[idx + 1] if idx + 1 < len(sys.argv) else os.environ.get("ALERT_MESSAGE", "")
+        if not text.strip():
+            log.error("--send needs a message (an argument after it, or ALERT_MESSAGE).")
+            sys.exit(1)
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(send_raw_message(text))
+        finally:
+            loop.close()
         return
 
     retry_delay = 5
