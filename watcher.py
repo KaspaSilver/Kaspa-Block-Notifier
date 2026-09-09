@@ -13,7 +13,9 @@ import time
 import logging
 import asyncio
 import base64
+import json
 import secrets
+import urllib.request
 
 import grpc
 from cryptography.hazmat.primitives.asymmetric.ec import (
@@ -52,13 +54,15 @@ NETWORK           = os.environ.get("KASPA_NETWORK", "mainnet")
 MIN_REWARD_KAS    = float(os.environ.get("MIN_REWARD_KAS", "0"))
 RECEIVER_ALIAS    = os.environ["RECEIVER_ALIAS"]
 RECEIVER_PUBKEY_X = os.environ["RECEIVER_PUBKEY_X"]
+# The stratum bridge's stats, for the {hashrate} placeholder. Same host the
+# control panel reads. Absent/unreachable simply leaves the hashrate "unknown".
+BRIDGE_STATS_URL  = os.environ.get("BRIDGE_STATS_URL", "http://bridge:3030/api/stats")
 
-# What the notification says. The default is what this sent before it was
-# configurable, so an existing deployment that sets nothing is unaffected.
+# What the notification says. The default now carries a hashrate line too.
 #
 # An env file cannot carry a real newline -- every value is one line -- so a
 # literal \n in the template becomes one here.
-DEFAULT_MESSAGE   = "Reward: {reward} KAS\nBalance: {balance} KAS"
+DEFAULT_MESSAGE   = "Reward: {reward} KAS\nBalance: {balance} KAS\nHashrate: {hashrate}"
 MESSAGE_TEMPLATE  = (os.environ.get("MESSAGE_TEMPLATE") or DEFAULT_MESSAGE).replace("\\n", "\n")
 
 
@@ -66,7 +70,34 @@ def sompi_to_kas(sompi: int) -> float:
     return sompi / 1e8
 
 
-def render_message(kas_amount: float, balance: float, reward_txid: str) -> str:
+def format_hashrate(ghs: float) -> str:
+    th = ghs / 1000.0
+    if th >= 1000:
+        return f"{th / 1000:.2f} PH/s"
+    if th >= 1:
+        return f"{th:.2f} TH/s"
+    return f"{ghs:.1f} GH/s"
+
+
+def fetch_pool_hashrate() -> str:
+    """Total hashrate of all connected miners, read from the stratum bridge.
+
+    The bridge reports per-worker hashrate in GH/s, so the pool total is their
+    sum. Best effort: an unreachable bridge (mining off, say) yields "unknown"
+    rather than holding up the notification.
+    """
+    try:
+        with urllib.request.urlopen(BRIDGE_STATS_URL, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+        workers = data.get("workers") or []
+        total_ghs = sum(float(w.get("hashrate") or 0) for w in workers)
+        return format_hashrate(total_ghs)
+    except Exception as exc:
+        log.warning("Could not read hashrate from the bridge: %s", exc)
+        return "unknown"
+
+
+def render_message(kas_amount: float, balance: float, reward_txid: str, hashrate: str = "unknown") -> str:
     """Fills MESSAGE_TEMPLATE in.
 
     A template with a placeholder this does not know would raise at the one
@@ -77,6 +108,7 @@ def render_message(kas_amount: float, balance: float, reward_txid: str) -> str:
     fields = {
         "reward": f"{kas_amount:.8f}",
         "balance": f"{balance:.8f}",
+        "hashrate": hashrate,
         "txid": reward_txid,
         "address": MINING_ADDRESS,
         "network": NETWORK,
@@ -148,7 +180,8 @@ async def send_kachat_notification(kas_amount: float, reward_txid: str):
         await rpc.connect()
 
         balance     = await get_balance(rpc, MINING_ADDRESS)
-        message     = render_message(kas_amount, balance, reward_txid)
+        hashrate    = fetch_pool_hashrate()
+        message     = render_message(kas_amount, balance, reward_txid, hashrate)
         log.info("Message: %s", message.replace("\n", " | "))
         payload_hex = build_payload_hex(message)
 
