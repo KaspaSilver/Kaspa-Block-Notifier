@@ -65,6 +65,15 @@ BRIDGE_STATS_URL  = os.environ.get("BRIDGE_STATS_URL", "http://bridge:3030/api/s
 DEFAULT_MESSAGE   = "Reward: {reward} KAS\nBalance: {balance} KAS\nHashrate: {hashrate}"
 MESSAGE_TEMPLATE  = (os.environ.get("MESSAGE_TEMPLATE") or DEFAULT_MESSAGE).replace("\\n", "\n")
 
+# A record of what was sent, one JSON object per line, on a path the control
+# panel mounts and reads back for its "Notifications sent" list. Survives the
+# container being recreated (which the panel does on every settings change),
+# unlike the docker log. Bounded so a long-running miner never grows it without
+# limit. Best effort throughout: a history that cannot be written must never
+# stop a notification going out.
+HISTORY_FILE      = os.environ.get("NOTIFY_HISTORY_FILE", "/state/notifications.jsonl")
+HISTORY_MAX       = int(os.environ.get("NOTIFY_HISTORY_MAX", "1000"))
+
 
 def sompi_to_kas(sompi: int) -> float:
     return sompi / 1e8
@@ -173,6 +182,28 @@ async def get_balance(rpc: RpcClient, address: str) -> float:
         return 0.0
 
 
+def record_notification(entry: dict) -> None:
+    """Appends one sent notification to the history file, then trims it.
+
+    Wrapped so any failure -- a read-only mount, a missing directory -- is
+    logged and swallowed: the send has already happened by the time this runs,
+    and losing its record is not worth crashing the watcher over.
+    """
+    try:
+        os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
+        with open(HISTORY_FILE, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry, separators=(",", ":")) + "\n")
+        # Keep only the most recent HISTORY_MAX lines. Cheap: the file is small
+        # by construction, and blocks are minutes apart at best.
+        with open(HISTORY_FILE, "r", encoding="utf-8") as fh:
+            lines = fh.readlines()
+        if len(lines) > HISTORY_MAX:
+            with open(HISTORY_FILE, "w", encoding="utf-8") as fh:
+                fh.writelines(lines[-HISTORY_MAX:])
+    except Exception as exc:
+        log.warning("Could not write notification history: %s", exc)
+
+
 async def send_kachat_notification(kas_amount: float, reward_txid: str):
     try:
         private_key = PrivateKey(PRIVATE_KEY_HEX)
@@ -220,6 +251,16 @@ async def send_kachat_notification(kas_amount: float, reward_txid: str):
             txid = await tx.submit(rpc)
             log.info("KaChat notification sent! Fee: %d sompi  TX: %s",
                      tx.fee_amount, txid)
+            record_notification({
+                "ts": int(time.time()),
+                "kind": "block",
+                "kas": round(kas_amount, 8),
+                "balance": round(balance, 8),
+                "hashrate": hashrate,
+                "txid": str(txid),
+                "reward_txid": reward_txid,
+                "fee_sompi": int(tx.fee_amount),
+            })
 
         await rpc.disconnect()
 
@@ -269,6 +310,13 @@ async def send_raw_message(text: str):
                 tx.sign([private_key])
                 txid = await tx.submit(rpc)
                 log.info("Message sent! Fee: %d sompi  TX: %s", tx.fee_amount, txid)
+                record_notification({
+                    "ts": int(time.time()),
+                    "kind": "message",
+                    "text": text[:200],
+                    "txid": str(txid),
+                    "fee_sompi": int(tx.fee_amount),
+                })
         finally:
             await rpc.disconnect()
 
