@@ -151,9 +151,13 @@ def kachat_encrypt(plaintext: str, receiver_x_hex: str) -> bytes:
 
 
 def build_payload_hex(message: str) -> str:
+    # KaChat's own on-chain identifier is `kchat:`, its own network -- not the
+    # Kasia `ciph_msg:` prefix this used to write. The op name (comm) and the
+    # encryption are unchanged; only the prefix moves. The indexer still reads
+    # the old prefix, so this is forward-only.
     encrypted   = kachat_encrypt(message, RECEIVER_PUBKEY_X)
     b64         = base64.b64encode(encrypted).decode("utf-8")
-    payload_str = f"ciph_msg:1:comm:{RECEIVER_ALIAS}:{b64}"
+    payload_str = f"kchat:1:comm:{RECEIVER_ALIAS}:{b64}"
     return payload_str.encode("utf-8").hex()
 
 
